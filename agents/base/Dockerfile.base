@@ -1,0 +1,78 @@
+# ==========================================
+# CTF Agent ベースイメージ
+# ==========================================
+# 全AIエージェントが共有するDockerイメージ。
+# CTF解析に必要なツール群とAI CLIツールをインストールする。
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── システムパッケージ（CTF解析ツール群） ─────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python環境
+    python3 python3-pip python3-dev \
+    # ネットワークツール
+    curl wget git ca-certificates gnupg \
+    # バイナリ解析ツール
+    file binutils xxd hexedit \
+    # デバッグツール
+    gdb ltrace strace \
+    # アーカイブツール
+    unzip p7zip-full bzip2 \
+    # コンパイラ・ビルドツール
+    gcc g++ make cmake \
+    # 暗号・SSL関連
+    libssl-dev libffi-dev \
+    # テキスト処理
+    jq bc \
+    # ネットワーク解析
+    netcat-openbsd nmap \
+    # その他
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js 20（CLIツールに必要） ────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── GitHub CLI（Copilot CLI用） ──────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── AI CLIツールのインストール ───────────────────────────────
+# GitHub Copilot CLI v0.0.407（独立バイナリ）
+RUN curl -L -o /tmp/copilot.tar.gz "https://github.com/github/copilot-cli/releases/download/v0.0.407/copilot-linux-x64.tar.gz" \
+    && tar -xzf /tmp/copilot.tar.gz -C /tmp \
+    && mv /tmp/copilot /usr/local/bin/copilot \
+    && chmod +x /usr/local/bin/copilot \
+    && rm -rf /tmp/copilot.tar.gz
+
+# Google Gemini CLI（npm パッケージ）
+RUN npm install -g @google/gemini-cli --no-update-notifier
+
+# ── Python CTFライブラリ ─────────────────────────────────────
+RUN pip3 install --no-cache-dir --break-system-packages \
+    pycryptodome \
+    z3-solver \
+    sympy \
+    requests \
+    && pip3 install --no-cache-dir --break-system-packages \
+    pwntools 2>/dev/null || true
+
+# ── Ollamaクライアント（gemini_ollama用） ────────────────────
+RUN curl -fsSL https://ollama.com/install.sh | sh 2>/dev/null || true
+
+# ── ランナースクリプトとエントリーポイントをコピー ────────────
+COPY agent_runners/ /agent_runners/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+WORKDIR /workspace
+
+CMD ["/bin/bash", "/entrypoint.sh"]

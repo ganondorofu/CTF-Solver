@@ -1,0 +1,178 @@
+# ==========================================
+# CTF-Solver Docker Compose Configuration
+# ==========================================
+# 複数AI CLIエージェントのコンテナ化実行環境
+# 既存のctf-agent-baseイメージを使用し、実際に動作確認済みのツールのみを含む
+
+services:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # GitHub Copilot CLI v0.0.407 (独立バイナリ、動作確認済み)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  copilot:
+    image: ctf-agent-base:latest
+    container_name: ai-copilot
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    volumes:
+      # 作業ディレクトリ
+      - type: bind
+        source: ./workspace
+        target: /workspace
+      # GitHub Copilot CLI認証（v0.0.407用）
+      - type: bind
+        source: ${HOME}/.config/copilot
+        target: /root/.config/copilot
+        read_only: true
+        bind:
+          create_host_path: false
+    command: >
+      bash -c "
+      echo '=== GitHub Copilot CLI Agent ===' &&
+      if [ -d '/root/.config/copilot' ]; then
+        echo '✓ Copilot認証済み' &&
+        copilot --version
+      else
+        echo '⚠ 未認証: ホストで copilot login を実行してください'
+      fi &&
+      echo 'コマンド例: copilot -p \"問題を解いて\" --allow-all-tools --silent' &&
+      exec bash"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # CTF専用ベースエージェント（全ツール搭載）
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ctf-base:
+    image: ctf-agent-base:latest
+    container_name: ai-ctf-base
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    volumes:
+      # 作業ディレクトリ
+      - type: bind
+        source: ./workspace
+        target: /workspace
+      # 各種認証情報（存在する場合のみ）
+      - type: bind
+        source: ${HOME}/.config/copilot
+        target: /root/.config/copilot
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOME}/.config/gh
+        target: /root/.config/gh
+        read_only: true
+        bind:
+          create_host_path: false
+      # 将来的な他CLI用認証ディレクトリ
+      - type: bind
+        source: ${HOME}/.claude
+        target: /root/.claude
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOME}/.anthropic
+        target: /root/.anthropic
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      - NO_UPDATE_NOTIFIER=1
+      - DEBIAN_FRONTEND=noninteractive
+    command: >
+      bash -c "
+      echo '=== CTF Agent Base Environment ===' &&
+      echo 'インストール済みツール:' &&
+      echo '- Python3 + CTFライブラリ (pwntools, pycryptodome, z3)' &&
+      echo '- バイナリ解析 (gdb, binutils, file, xxd)' &&
+      echo '- 暗号化ツール (openssl)' &&
+      echo '- ネットワーク (netcat, nmap, curl)' &&
+      echo '- AI CLI (copilot)' &&
+      echo '' &&
+      echo '認証状況チェック:' &&
+      if [ -d '/root/.config/copilot' ]; then
+        echo '✓ GitHub Copilot認証済み'
+      else
+        echo '⚠ GitHub Copilot未認証'
+      fi &&
+      if [ -d '/root/.config/gh' ]; then
+        echo '✓ GitHub CLI認証済み'
+      else
+        echo '⚠ GitHub CLI未認証'
+      fi &&
+      echo '' &&
+      echo 'CTF問題解析環境の準備完了' &&
+      exec bash"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Ollama Server (ローカルLLM用、オプション)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: >
+      bash -c "
+      echo '=== Ollama Server Starting ===' &&
+      ollama serve"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # CTF オーケストレーター (Python管理プロセス)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  orchestrator:
+    image: python:3.11-slim
+    container_name: ctf-orchestrator
+    working_dir: /app
+    tty: true
+    stdin_open: true
+    volumes:
+      # プロジェクト全体をマウント
+      - type: bind
+        source: .
+        target: /app
+      # Docker socketをマウント（他のコンテナ管理用）
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    environment:
+      - PYTHONPATH=/app
+      - NO_UPDATE_NOTIFIER=1
+    depends_on:
+      - ollama
+    command: >
+      bash -c "
+      echo '=== CTF Orchestrator ===' &&
+      pip install --no-cache-dir -r requirements.txt &&
+      echo '✓ Python依存関係インストール完了' &&
+      echo '' &&
+      echo '利用可能コマンド:' &&
+      echo '  python -m orchestrator.main --challenge <ID>' &&
+      echo '  python -m orchestrator.main --host-mode' &&
+      echo '  python -m orchestrator.main --build-image' &&
+      echo '' &&
+      exec bash"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 名前付きボリューム定義
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+volumes:
+  ollama-data:
+    driver: local
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ネットワーク設定（デフォルト）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+networks:
+  default:
+    name: ctf-solver-net

@@ -1,0 +1,23 @@
+# ==========================================
+# CTF Solver メイン設定ファイル
+# ==========================================
+
+# CTFdプラットフォーム接続設定
+ctfd:
+  url: "${CTFD_URL}"                # CTFdのURL（.envから読み込み）
+  token: "${CTFD_TOKEN}"            # CTFd APIトークン（.envから読み込み）
+
+# ヒント取得設定
+hints:
+  allow_cost_hints: false           # コスト付きヒントを取得するか（false=無料のみ）
+  max_cost: 0                       # 許容する最大コスト（0=無料のみ）
+
+# 配布ファイル設定
+files:
+  auto_download: true               # 配布ファイルを自動ダウンロードするか
+  max_size: 100                     # 最大ファイルサイズ（MB）
+
+# フラグ評価設定
+flag_evaluation:
+  method: "voting"                  # フラグ選択方法（voting=多数決）
+  wait_time: 30                     # 全エージェントのフラグ収集待機時間（秒）
