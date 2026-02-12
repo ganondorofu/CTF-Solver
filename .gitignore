@@ -1,0 +1,22 @@
+# 環境変数・シークレット
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# 実行時生成ディレクトリ
+challenges/*/
+
+# ログ
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
