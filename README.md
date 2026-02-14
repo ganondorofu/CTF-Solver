@@ -148,6 +148,9 @@ python -m orchestrator.main --challenge 100 101 102
 
 # 4. 全ての未解決問題を解答
 python -m orchestrator.main
+
+# 5. 特定の問題をスキップ
+python -m orchestrator.main --skip 222
 ```
 
 ### 実行例

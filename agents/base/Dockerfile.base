@@ -46,15 +46,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # ── AI CLIツールのインストール ───────────────────────────────
-# GitHub Copilot CLI v0.0.407（独立バイナリ）
-RUN curl -L -o /tmp/copilot.tar.gz "https://github.com/github/copilot-cli/releases/download/v0.0.407/copilot-linux-x64.tar.gz" \
-    && tar -xzf /tmp/copilot.tar.gz -C /tmp \
-    && mv /tmp/copilot /usr/local/bin/copilot \
-    && chmod +x /usr/local/bin/copilot \
-    && rm -rf /tmp/copilot.tar.gz
+# GitHub Copilot CLI（npm パッケージ）
+RUN npm install -g @github/copilot --no-update-notifier
 
 # Google Gemini CLI（npm パッケージ）
 RUN npm install -g @google/gemini-cli --no-update-notifier
+
+# OpenAI Codex CLI（npm パッケージ）
+RUN npm install -g @openai/codex --no-update-notifier
 
 # ── Python CTFライブラリ ─────────────────────────────────────
 RUN pip3 install --no-cache-dir --break-system-packages \
@@ -71,7 +70,8 @@ RUN curl -fsSL https://ollama.com/install.sh | sh 2>/dev/null || true
 # ── ランナースクリプトとエントリーポイントをコピー ────────────
 COPY agent_runners/ /agent_runners/
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY submit_flag.sh /submit_flag.sh
+RUN chmod +x /entrypoint.sh /submit_flag.sh
 
 WORKDIR /workspace
 

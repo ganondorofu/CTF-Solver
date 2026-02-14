@@ -2,11 +2,12 @@
 # AIエージェント設定ファイル
 # ==========================================
 # 各エージェントはCLIツールを使用してCTF問題を自律的に解く
+# instances: 並列インスタンス数（0 = 無効）
 
 agents:
   # Claude Code CLI（Anthropic）
   claude_code:
-    enabled: false
+    instances: 0
     type: "claude_code"
     description: "Claude Code CLI（Anthropic）"
     env_vars:
@@ -14,23 +15,21 @@ agents:
 
   # OpenAI Codex CLI
   codex_cli:
-    enabled: false
+    instances: 1
     type: "codex_cli"
     description: "Codex CLI（OpenAI）"
-    env_vars:
-      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    env_vars: {}  # 認証は~/.codex/auth.jsonを使用
 
-  # GitHub Copilot CLI（動作確認済み）
+  # GitHub Copilot CLI
   copilot_cli:
-    enabled: true
+    instances: 2
     type: "copilot_cli"
     description: "GitHub Copilot CLI v0.0.407"
-    env_vars:
-      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    env_vars: {}  # 認証は~/.copilot/を使用
 
   # Google Gemini CLI（動作確認済み）
   gemini_cli:
-    enabled: true
+    instances: 1
     type: "gemini_cli" 
     description: "Gemini CLI (gemini コマンド)"
     env_vars:
@@ -38,7 +37,7 @@ agents:
 
   # Gemini CLI（Ollama経由ローカル実行）
   gemini_ollama:
-    enabled: false
+    instances: 0
     type: "gemini_ollama"
     description: "Gemini CLI（Ollama経由）"
     ollama_model: "gemma3"
@@ -47,10 +46,15 @@ agents:
 
 # 実行設定
 execution:
-  max_concurrent_challenges: 1      # 同時実行する問題数
-  agent_timeout: 1200               # 各エージェントのタイムアウト（秒）- Pwnエクスプロイト用に延長
-  challenge_timeout: 1800           # 問題全体のタイムアウト（秒）
+  max_concurrent_challenges: 1    # 同時実行する問題数
+  agent_timeout_initial: 300        # 1ラウンド目のタイムアウト（秒）
+  agent_timeout_increment: 120     # ラウンドごとの増分（秒）
+  agent_timeout_max: 900           # タイムアウト上限（秒）
   workspace_reset: true             # 再試行時にワークスペースを初期化するか
+  max_retries: 5                    # 最大リトライ回数（問題あたり）
+  max_no_flag_rounds: 3             # フラグ候補すら出ない連続ラウンド数でabandon
+  max_duplicate_flags: 2            # 同一不正解フラグの出現回数でabandon（迷走検出）
+  writeup_timeout: 180              # WriteUp後追い生成のタイムアウト（秒）
 
 # Docker設定
 docker:

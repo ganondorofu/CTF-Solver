@@ -98,6 +98,7 @@ class BaseRunner:
 
         一般的なフラグ形式（flag{...}, CTF{...}等）を検索し、
         過去の不正解フラグと一致するものは除外する。
+        また、curlによるCTFd提出結果からフラグを復元する。
 
         Args:
             output: CLIツールの出力テキスト
@@ -105,6 +106,13 @@ class BaseRunner:
         Returns:
             抽出されたフラグ文字列。見つからない場合はNone。
         """
+        # まずcurl提出で正解になったフラグを探す
+        # エージェントがcurlで直接提出し "correct" を得た場合、
+        # 直前のsubmission値を抽出する
+        curl_flag = self._extract_flag_from_curl_output(output)
+        if curl_flag:
+            return curl_flag
+
         # CTFで使われる一般的なフラグパターン
         patterns = [
             r'flag\{[^}]+\}',
@@ -115,13 +123,78 @@ class BaseRunner:
         ]
 
         wrong_flags = set(self.load_wrong_flags())
+        # プレースホルダーパターンを除外
+        placeholders = {
+            "flag{...}", "FLAG{...}", "CTF{...}", "flag{FLAG}", "YOUR_FLAG_HERE",
+            "flag{example_flag_123}",
+        }
 
         for pattern in patterns:
             matches = re.findall(pattern, output, re.IGNORECASE)
             for match in matches:
-                # 過去の不正解フラグは除外
-                if match not in wrong_flags:
+                if match in wrong_flags or match in placeholders:
+                    continue
+                # 3文字以上の中身があるフラグのみ
+                inner = re.search(r'\{(.+)\}', match)
+                if inner and len(inner.group(1)) >= 3 and inner.group(1) != "...":
                     return match
+
+        return None
+
+    # フラグパターンと成功キーワード（docker_managerと同じロジック）
+    _FLAG_RE = re.compile(r'[A-Za-z0-9_]+\{[^}]{3,}\}')
+    _PLACEHOLDERS = {
+        "flag{example_flag_123}", "flag{...}", "FLAG{...}", "CTF{...}", "flag{FLAG}",
+        "YOUR_FLAG_HERE", "DISCOVERED_FLAG",
+    }
+    _SUCCESS_KEYWORDS = (
+        "correct", "accepted", "success", "submitted",
+        "正解", "成功", "提出しました",
+        "CTFd応答: correct", "already_solved",
+    )
+
+    def _detect_flag_in_line(self, line: str) -> str | None:
+        """1行からフラグ+成功シグナルを検出する。"""
+        if "incorrect" in line.lower():
+            return None
+        flags = self._FLAG_RE.findall(line)
+        candidates = [f for f in flags if f not in self._PLACEHOLDERS]
+        if not candidates:
+            return None
+        line_lower = line.lower()
+        if any(kw in line_lower for kw in self._SUCCESS_KEYWORDS):
+            return candidates[-1]
+        return None
+
+    def _extract_flag_from_curl_output(self, output: str) -> str | None:
+        """curl提出結果から正解フラグを抽出する。"""
+        lines = output.splitlines()
+        last_submission = None
+        prompt_section = True
+
+        for line in lines:
+            if "コマンド実行:" in line or "=== " in line and "実行開始" in line:
+                prompt_section = False
+            if prompt_section:
+                continue
+
+            # JSON / エスケープ付きsubmission追跡
+            m = re.search(r'"submission"\s*:\s*"([^"]+)"', line)
+            if m and m.group(1) not in self._PLACEHOLDERS:
+                last_submission = m.group(1)
+            m2 = re.search(r'\\?"submission\\?"\s*:\\?\s*\\?"([^"\\]+)\\?"', line)
+            if m2 and m2.group(1) not in self._PLACEHOLDERS:
+                last_submission = m2.group(1)
+
+            # APIレスポンス "correct"
+            if '"status"' in line and '"correct"' in line and '"incorrect"' not in line:
+                if last_submission:
+                    return last_submission
+
+            # 汎用: フラグ+成功キーワード同一行
+            detected = self._detect_flag_in_line(line)
+            if detected:
+                return detected
 
         return None
 
@@ -131,7 +204,11 @@ class BaseRunner:
         self, cmd: list[str], env: dict | None = None, timeout: int | None = None
     ) -> tuple[str, str, int]:
         """
-        CLIコマンドをサブプロセスとして実行する。
+        CLIコマンドをサブプロセスとして実行し、出力をリアルタイムでストリーミングする。
+
+        stdout/stderrは両方とも sys.stdout に即座に出力されるため、
+        Dockerコンテナのログにリアルタイムで表示される。
+        同時に出力を内部バッファに蓄積して返す。
 
         Args:
             cmd: 実行するコマンドとその引数のリスト
@@ -141,28 +218,60 @@ class BaseRunner:
         Returns:
             (stdout, stderr, return_code) のタプル
         """
+        import threading
+
         # 環境変数を構築
         full_env = {**os.environ}
         if env:
             full_env.update(env)
 
         effective_timeout = timeout if timeout is not None else self.timeout
-        self.logger.info("コマンド実行: %s", " ".join(cmd))
+        self.logger.info("コマンド実行: %s", " ".join(cmd[:6]))
 
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.work_dir),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=effective_timeout,
                 env=full_env,
+                bufsize=1,
             )
-            return proc.stdout, proc.stderr, proc.returncode
 
-        except subprocess.TimeoutExpired:
-            self.logger.warning("コマンドタイムアウト（%d秒）", effective_timeout)
-            return "", "TIMEOUT", -1
+            stdout_lines = []
+            stderr_lines = []
+
+            def _stream_reader(pipe, buf, label):
+                """パイプから行を読みリアルタイム出力しつつバッファに蓄積する。"""
+                try:
+                    for line in iter(pipe.readline, ""):
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
+                        buf.append(line)
+                except Exception:
+                    pass
+                finally:
+                    pipe.close()
+
+            t_out = threading.Thread(target=_stream_reader, args=(proc.stdout, stdout_lines, "stdout"), daemon=True)
+            t_err = threading.Thread(target=_stream_reader, args=(proc.stderr, stderr_lines, "stderr"), daemon=True)
+            t_out.start()
+            t_err.start()
+
+            try:
+                proc.wait(timeout=effective_timeout)
+            except subprocess.TimeoutExpired:
+                self.logger.warning("コマンドタイムアウト（%d秒）", effective_timeout)
+                proc.kill()
+                proc.wait()
+                t_out.join(timeout=5)
+                t_err.join(timeout=5)
+                return "".join(stdout_lines), "TIMEOUT\n" + "".join(stderr_lines), -1
+
+            t_out.join(timeout=10)
+            t_err.join(timeout=10)
+            return "".join(stdout_lines), "".join(stderr_lines), proc.returncode
 
         except FileNotFoundError:
             self.logger.error("コマンドが見つかりません: %s", cmd[0])

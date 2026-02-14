@@ -1,14 +1,13 @@
 """
 OpenAI Codex CLI ランナー
 
-OpenAIの自律型コーディングエージェント「Codex CLI」を使用して
-CTF問題を解く。Codex CLIは以下の機能を持つ:
-- ファイルの読み書き
-- シェルコマンドの実行
-- コードの生成・実行
+事前準備（ホスト側で1回だけ）:
+    codex login
+
+認証: ~/.codex/ がDockerマウントされるため自動認証。
 
 使用コマンド:
-    codex --approval-mode full-auto -q "<prompt>"
+    codex exec "prompt" --full-auto -C /workspace/try
 """
 
 import sys
@@ -27,18 +26,58 @@ class CodexRunner(BaseRunner):
         """
         Codex CLIを実行してCTF問題を解く。
 
-        --approval-mode full-auto で全操作を自動承認し、
-        -q（quiet）で非対話的に実行する。
+        `codex exec` で非対話型実行し、
+        --full-auto で自動承認モードにする。
         """
-        prompt = self.load_prompt()
+        import os
+        import subprocess
 
-        # Codex CLIを完全自動モードで実行
+        self.logger.info("=== Codex実行開始: デバッグ情報 ===")
+
+        # 認証状況の確認
+        codex_dir = "/root/.codex"
+        if os.path.exists(codex_dir):
+            self.logger.info("認証ディレクトリ存在: %s", codex_dir)
+            for f in os.listdir(codex_dir):
+                self.logger.info("  ファイル: %s", f)
+        else:
+            self.logger.error("認証ディレクトリ未存在: %s", codex_dir)
+
+        # codexコマンドの存在確認
+        try:
+            result = subprocess.run(["which", "codex"], capture_output=True, text=True)
+            self.logger.info("codexパス: %s", result.stdout.strip())
+        except Exception as e:
+            self.logger.error("whichコマンドエラー: %s", e)
+
+        # config.tomlに作業ディレクトリを信頼済みとして追加
+        config_path = os.path.join(codex_dir, "config.toml")
+        try:
+            import tomllib
+            existing = ""
+            if os.path.exists(config_path):
+                existing = open(config_path).read()
+            # /workspace/tryが未登録なら追加
+            if '/workspace/try' not in existing:
+                with open(config_path, "a") as f:
+                    f.write('\n[projects."/workspace/try"]\ntrust_level = "trusted"\n')
+                self.logger.info("config.toml に /workspace/try を信頼済み追加")
+        except Exception as e:
+            self.logger.warning("config.toml更新失敗: %s", e)
+
+        prompt = self.load_prompt()
+        self.logger.info("プロンプトサイズ: %d 文字", len(prompt))
+
+        # Codex CLIを非対話型・完全自動モードで実行
+        # Docker内（既にサンドボックス）なので全権限を許可
         cmd = [
-            "codex",
-            "--approval-mode", "full-auto",   # 全操作を自動承認
-            "-q",                              # クワイエットモード
+            "codex", "exec",
             prompt,
+            "--dangerously-bypass-approvals-and-sandbox",  # Docker内なので安全
+            "-C", str(self.work_dir),       # 作業ディレクトリを指定
         ]
+
+        self.logger.info("実行コマンド: codex exec [プロンプト省略] --full-auto -C %s", self.work_dir)
 
         stdout, stderr, rc = self.run_cli(cmd)
         self.logger.info("Codex CLI 終了コード: %d", rc)
