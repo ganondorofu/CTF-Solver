@@ -115,13 +115,12 @@ class CTFdClient:
         フラグをCTFdに提出し、結果を返す。
 
         Returns:
-            {"status": "correct"/"incorrect", "message": "..."}
+            APIレスポンス全体: {"success": bool, "data": {"status": "...", "message": "..."}}
         """
-        data = self._api("POST", "/challenges/attempt", json={
+        return self._api("POST", "/challenges/attempt", json={
             "challenge_id": challenge_id,
             "submission": flag,
         })
-        return data.get("data", {})
 
     # ── 解答状況 ─────────────────────────────────────────────
 

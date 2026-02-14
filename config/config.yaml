@@ -17,7 +17,6 @@ files:
   auto_download: true               # 配布ファイルを自動ダウンロードするか
   max_size: 100                     # 最大ファイルサイズ（MB）
 
-# フラグ評価設定
+# フラグ評価設定（各エージェントがsubmit_flag.shで自律提出）
 flag_evaluation:
-  method: "voting"                  # フラグ選択方法（voting=多数決）
-  wait_time: 30                     # 全エージェントのフラグ収集待機時間（秒）
+  wait_time: 30                     # 全エージェント終了待機時間（秒）
