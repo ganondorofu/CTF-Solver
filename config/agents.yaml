@@ -84,11 +84,11 @@ agents:
       - name: ttytb
         weight: 1
         env_vars:
-          ZAI_API_KEY: "38d84da939bd4d0c985dd06f79f68b9c.bvyOO3aGFLJsjlwl"
+          ZAI_API_KEY: "${ZAI_API_KEY_TTYTB}"
       - name: sub
         weight: 1
         env_vars:
-          ZAI_API_KEY: "8edad6e8317544aaae06bfe00355bf3d.E7WrwFr3gWxVDReW"
+          ZAI_API_KEY: "${ZAI_API_KEY_SUB}"
 
   # Claude Code CLI（Kimi / Moonshot AI 経由）
   kimi:
@@ -101,12 +101,12 @@ agents:
       - name: ganondorofu
         weight: 1
         env_vars:
-          KIMI_API_KEY: "sk-4m1eitGTYt4n00gBQbmRovdhI4QybsEcWhe7C2tsuPRsgJBm"
+          KIMI_API_KEY: "${KIMI_API_KEY_GANONDOROFU}"
           KIMI_MODEL: "kimi-k2.5"
       - name: ttytb
         weight: 1
         env_vars:
-          KIMI_API_KEY: "sk-HnivZLA7p7mADWJlcEog5EbkzDMf7V5n4oWOknlKby1sudzT"
+          KIMI_API_KEY: "${KIMI_API_KEY_TTYTB}"
           KIMI_MODEL: "kimi-k2.5"
 
   # Claude Code CLI（Ollama経由ローカルモデル実行）
