@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CTF Solver Dashboard</title>
+<style>
+:root {
+  --bg: #0a0e14; --bg2: #0d1117; --surface: #151b23; --surface2: #1c2333;
+  --border: #2a3040; --border2: #3a4555;
+  --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
+  --accent: #58a6ff; --accent2: #388bfd;
+  --green: #3fb950; --green-bg: #0d2818; --green-border: #1a4c2a;
+  --red: #f85149; --red-bg: #2d1214; --red-border: #5c2125;
+  --orange: #d29922; --orange-bg: #2a1e00; --orange-border: #503d0e;
+  --purple: #bc8cff; --purple-bg: #1a1030; --purple-border: #3a2560;
+  --cyan: #39d2c0; --cyan-bg: #0d2a26;
+  --radius: 10px; --radius-sm: 6px;
+  --shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+a { color:var(--accent); text-decoration:none; }
+
+/* Layout */
+.app { display:grid; grid-template-columns:1fr; gap:0; min-height:100vh; }
+.sidebar { background:var(--bg2); border-right:1px solid var(--border); padding:16px; display:none; }
+.main { padding:20px; max-width:1600px; margin:0 auto; width:100%; }
+
+/* Header */
+header { display:flex; align-items:center; justify-content:space-between; padding:0 0 16px; margin-bottom:20px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+.logo { display:flex; align-items:center; gap:10px; }
+.logo h1 { font-size:1.3em; font-weight:700; }
+.logo h1 .highlight { color:var(--accent); }
+.header-right { display:flex; align-items:center; gap:12px; }
+.conn-badge { font-size:.78em; padding:3px 10px; border-radius:12px; font-weight:500; display:flex; align-items:center; gap:5px; }
+.conn-badge.on { background:var(--green-bg); color:var(--green); border:1px solid var(--green-border); }
+.conn-badge.off { background:var(--red-bg); color:var(--red); border:1px solid var(--red-border); }
+.elapsed { font-size:.82em; color:var(--text2); font-variant-numeric:tabular-nums; }
+.ended-badge { font-size:.78em; padding:3px 10px; border-radius:12px; font-weight:600; background:var(--red-bg); color:var(--red); border:1px solid var(--red-border); }
+
+/* Tab nav */
+.tab-nav { display:flex; gap:2px; background:var(--surface); border-radius:var(--radius); padding:3px; margin-bottom:20px; overflow-x:auto; }
+.tab-btn { padding:8px 16px; border:none; background:transparent; color:var(--text2); font-size:.85em; cursor:pointer; border-radius:var(--radius-sm); white-space:nowrap; transition:all .15s; font-weight:500; }
+.tab-btn:hover { color:var(--text); background:var(--surface2); }
+.tab-btn.active { background:var(--accent2); color:#fff; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Cards grid */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.stat-card.green::before { background:var(--green); }
+.stat-card.orange::before { background:var(--orange); }
+.stat-card.purple::before { background:var(--purple); }
+.stat-card.blue::before { background:var(--accent); }
+.stat-card.red::before { background:var(--red); }
+.stat-val { font-size:2em; font-weight:700; line-height:1.1; }
+.stat-label { font-size:.78em; color:var(--text2); margin-top:4px; text-transform:uppercase; letter-spacing:.3px; }
+.stat-sub { font-size:.72em; color:var(--text3); margin-top:2px; }
+
+/* Progress bar */
+.progress-wrap { margin-bottom:20px; }
+.progress-bar { height:28px; background:var(--surface); border-radius:14px; overflow:hidden; display:flex; border:1px solid var(--border); }
+.progress-fill { height:100%; transition:width .5s ease; display:flex; align-items:center; justify-content:center; font-size:.72em; font-weight:600; color:#fff; min-width:0; }
+.progress-fill.solved { background:linear-gradient(90deg, #238636, #3fb950); }
+.progress-fill.working { background:linear-gradient(90deg, #1a6dd1, #58a6ff); }
+.progress-fill.unsolved { background:transparent; }
+.progress-labels { display:flex; justify-content:space-between; margin-top:6px; font-size:.78em; color:var(--text2); }
+
+/* Category chart */
+.cat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px; margin-bottom:20px; }
+.cat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; }
+.cat-name { font-size:.85em; font-weight:600; margin-bottom:6px; }
+.cat-bar-bg { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; margin-bottom:4px; }
+.cat-bar-fill { height:100%; background:var(--green); border-radius:3px; transition:width .4s; }
+.cat-stats { font-size:.72em; color:var(--text2); display:flex; justify-content:space-between; }
+
+/* Agents section */
+.agents-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:12px; margin-bottom:20px; }
+.agent-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; cursor:pointer; transition:all .15s; position:relative; }
+.agent-card:hover { border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow); }
+.agent-card.selected { border-color:var(--accent); background:var(--surface2); }
+.agent-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.agent-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.agent-dot.running { background:var(--green); box-shadow:0 0 6px var(--green); }
+.agent-dot.exited { background:var(--red); }
+.agent-dot.unknown { background:var(--text3); }
+.agent-name { font-weight:600; font-size:.9em; }
+.agent-model { font-size:.7em; color:var(--accent); background:var(--surface2); padding:2px 6px; border-radius:3px; border:1px solid var(--border2); font-family:monospace; }
+.agent-type { font-size:.72em; color:var(--text3); background:var(--bg); padding:1px 6px; border-radius:3px; margin-left:auto; }
+.agent-status { font-size:.78em; color:var(--text2); }
+.agent-working { font-size:.72em; color:var(--cyan); margin-top:4px; }
+
+/* Challenge table */
+.table-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+.search-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 12px; color:var(--text); font-size:.85em; flex:1; min-width:200px; outline:none; }
+.search-box:focus { border-color:var(--accent); }
+.filter-group { display:flex; gap:3px; background:var(--surface); border-radius:var(--radius-sm); padding:2px; flex-wrap:wrap; }
+.filter-btn { padding:5px 10px; border:none; background:transparent; color:var(--text2); font-size:.78em; cursor:pointer; border-radius:4px; white-space:nowrap; }
+.filter-btn:hover { color:var(--text); }
+.filter-btn.active { background:var(--accent2); color:#fff; }
+
+.ch-table { width:100%; border-collapse:separate; border-spacing:0; }
+.ch-table th { text-align:left; padding:10px 14px; border-bottom:2px solid var(--border); color:var(--text2); font-size:.75em; font-weight:600; text-transform:uppercase; letter-spacing:.5px; cursor:pointer; user-select:none; white-space:nowrap; }
+.ch-table th:hover { color:var(--text); }
+.ch-table th .sort-arrow { font-size:.65em; margin-left:3px; }
+.ch-table td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:.88em; vertical-align:middle; }
+.ch-table tr { cursor:pointer; transition:background .1s; }
+.ch-table tbody tr:hover { background:var(--surface2); }
+.ch-table tr.solved-row { opacity:.7; }
+.pill { display:inline-block; padding:2px 10px; border-radius:10px; font-size:.75em; font-weight:600; }
+.pill.solved { background:var(--green-bg); color:var(--green); border:1px solid var(--green-border); }
+.pill.unsolved { background:var(--orange-bg); color:var(--orange); border:1px solid var(--orange-border); }
+.pill.working { background:var(--purple-bg); color:var(--purple); border:1px solid var(--purple-border); }
+.cat-tag { display:inline-block; padding:1px 8px; border-radius:4px; font-size:.75em; border:1px solid var(--border); color:var(--text2); }
+.solves-bar { display:inline-flex; align-items:center; gap:5px; }
+.solves-indicator { width:40px; height:4px; background:var(--bg); border-radius:2px; overflow:hidden; }
+.solves-fill { height:100%; background:var(--cyan); border-radius:2px; }
+
+/* Challenge detail panel */
+.detail-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.6); z-index:100; display:none; backdrop-filter:blur(4px); }
+.detail-overlay.show { display:flex; align-items:center; justify-content:center; }
+.detail-panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); width:90%; max-width:800px; max-height:85vh; overflow-y:auto; padding:24px; box-shadow:0 8px 32px rgba(0,0,0,.5); }
+.detail-close { float:right; background:none; border:none; color:var(--text2); font-size:1.5em; cursor:pointer; padding:0 4px; line-height:1; }
+.detail-close:hover { color:var(--text); }
+.detail-title { font-size:1.2em; font-weight:700; margin-bottom:4px; padding-right:30px; }
+.detail-meta { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; font-size:.82em; color:var(--text2); }
+.detail-meta span { display:flex; align-items:center; gap:4px; }
+.detail-section { margin-bottom:16px; }
+.detail-section h3 { font-size:.82em; color:var(--text2); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; font-weight:600; }
+.detail-desc { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; font-size:.88em; line-height:1.6; overflow-wrap:break-word; }
+.detail-desc img { max-width:100%; }
+.detail-hints { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; font-size:.85em; }
+.detail-files { list-style:none; }
+.detail-files li { padding:6px 0; font-size:.85em; border-bottom:1px solid var(--border); }
+.detail-files li:last-child { border:none; }
+.detail-conn { background:var(--cyan-bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; font-family:monospace; font-size:.85em; color:var(--cyan); }
+
+/* Log panel */
+.log-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.log-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--border); gap:10px; }
+.log-header-title { font-size:.85em; font-weight:600; }
+.log-controls { display:flex; gap:6px; align-items:center; }
+.log-search { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:4px 8px; color:var(--text); font-size:.78em; width:150px; outline:none; }
+.log-search:focus { border-color:var(--accent); }
+.log-btn { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:4px 8px; color:var(--text2); font-size:.72em; cursor:pointer; }
+.log-btn:hover { color:var(--text); border-color:var(--text2); }
+.log-btn.active { background:var(--accent2); color:#fff; border-color:var(--accent2); }
+.log-body { background:var(--bg); padding:12px; font-family:'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size:.72em; line-height:1.5; max-height:600px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; color:#c9d1d9; }
+.log-body .highlight { background:var(--orange); color:#000; padding:0 2px; border-radius:2px; }
+
+/* Activity feed */
+.activity-feed { max-height:400px; overflow-y:auto; }
+.activity-item { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:.82em; align-items:flex-start; }
+.activity-item:last-child { border:none; }
+.activity-icon { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.7em; flex-shrink:0; margin-top:2px; }
+.activity-icon.solve { background:var(--green-bg); color:var(--green); }
+.activity-icon.wrong { background:var(--red-bg); color:var(--red); }
+.activity-icon.claim { background:var(--purple-bg); color:var(--purple); }
+.activity-icon.start { background:var(--orange-bg); color:var(--orange); }
+.activity-body { flex:1; min-width:0; }
+.activity-agent { font-weight:600; color:var(--accent); font-size:.85em; }
+.activity-msg { color:var(--text2); word-break:break-word; }
+.activity-ts { font-size:.72em; color:var(--text3); white-space:nowrap; }
+
+/* Empty state */
+.empty-state { text-align:center; padding:40px; color:var(--text3); font-size:.9em; }
+
+/* Responsive */
+@media(max-width:768px) {
+  .main { padding:12px; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .agents-grid { grid-template-columns:1fr; }
+  .table-controls { flex-direction:column; }
+  .detail-panel { width:95%; padding:16px; }
+  .stat-val { font-size:1.5em; }
+}
+@media(max-width:480px) {
+  .stats-grid { grid-template-columns:1fr 1fr; gap:8px; }
+  .tab-btn { padding:6px 10px; font-size:.78em; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="main">
+  <header>
+    <div class="logo">
+      <h1>&#x1f3f4; <span class="highlight">CTF Solver</span></h1>
+    </div>
+    <div class="header-right">
+      <span id="elapsed" class="elapsed"></span>
+      <span id="endedBadge" class="ended-badge" style="display:none">CTF ENDED &middot; Benchmark</span>
+      <span id="conn" class="conn-badge off"><span>&#x25cf;</span> Disconnected</span>
+    </div>
+  </header>
+
+  <!-- Tab navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard">&#x1f4ca; Dashboard</button>
+    <button class="tab-btn" data-tab="challenges">&#x1f3af; Challenges</button>
+    <button class="tab-btn" data-tab="agents">&#x1f916; Agents</button>
+    <button class="tab-btn" data-tab="activity">&#x26a1; Activity</button>
+  </nav>
+
+  <!-- Dashboard tab -->
+  <div id="tab-dashboard" class="tab-panel active">
+    <div id="statsGrid" class="stats-grid"></div>
+    <div class="progress-wrap">
+      <div id="progressBar" class="progress-bar"></div>
+      <div id="progressLabels" class="progress-labels"></div>
+    </div>
+    <div id="catGrid" class="cat-grid"></div>
+    <h3 style="font-size:.85em;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600;">Agents</h3>
+    <div id="dashAgents" class="agents-grid"></div>
+    <h3 style="font-size:.85em;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px;font-weight:600;">Recent Activity</h3>
+    <div id="dashActivity" class="activity-feed" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;"></div>
+  </div>
+
+  <!-- Challenges tab -->
+  <div id="tab-challenges" class="tab-panel">
+    <div class="table-controls">
+      <input id="chSearch" class="search-box" placeholder="&#x1f50d; Search challenges..." />
+      <div class="filter-group" id="catFilters"></div>
+      <div class="filter-group">
+        <button class="filter-btn active" data-status="all">All</button>
+        <button class="filter-btn" data-status="unsolved">Unsolved</button>
+        <button class="filter-btn" data-status="solved">Solved</button>
+        <button class="filter-btn" data-status="working">Working</button>
+      </div>
+    </div>
+    <table class="ch-table">
+      <thead>
+        <tr>
+          <th data-sort="id">ID <span class="sort-arrow"></span></th>
+          <th data-sort="name">Name <span class="sort-arrow"></span></th>
+          <th data-sort="category">Category <span class="sort-arrow"></span></th>
+          <th data-sort="value">Points <span class="sort-arrow"></span></th>
+          <th data-sort="solves">Solves <span class="sort-arrow"></span></th>
+          <th data-sort="status">Status <span class="sort-arrow"></span></th>
+        </tr>
+      </thead>
+      <tbody id="chBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Agents tab -->
+  <div id="tab-agents" class="tab-panel">
+    <div id="agentCards" class="agents-grid" style="margin-bottom:16px;"></div>
+    <div id="logSection" style="display:none;">
+      <div class="log-wrap">
+        <div class="log-header">
+          <span class="log-header-title">&#x1f4cb; Log: <span id="logAgentName">-</span></span>
+          <div class="log-controls">
+            <input id="logSearch" class="log-search" placeholder="Search log..." />
+            <button id="logAutoScroll" class="log-btn active" title="Auto-scroll">&#x2b07; Auto</button>
+            <button id="logClear" class="log-btn" title="Clear display">Clear</button>
+          </div>
+        </div>
+        <div id="logBody" class="log-body">Select an agent to view logs.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity tab -->
+  <div id="tab-activity" class="tab-panel">
+    <div id="activityFull" class="activity-feed" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;max-height:none;"></div>
+  </div>
+</div>
+</div>
+
+<!-- Challenge detail overlay -->
+<div id="detailOverlay" class="detail-overlay">
+  <div class="detail-panel">
+    <button class="detail-close" id="detailClose">&times;</button>
+    <div id="detailContent">Loading...</div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let challenges = [], overview = {}, activity = [];
+let selectedAgent = null, logWs = null, mainWs = null;
+let sortCol = 'value', sortDir = 1;
+let catFilter = 'all', statusFilter = 'all', searchQuery = '';
+let autoScroll = true, maxSolves = 1;
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const esc = s => { if (!s) return ''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; };
+
+// ── Tabs ──
+$$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+  $$('.tab-btn').forEach(b => b.classList.remove('active'));
+  $$('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  $(`#tab-${btn.dataset.tab}`).classList.add('active');
+}));
+
+// ── WebSocket ──
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  mainWs = new WebSocket(`${proto}//${location.host}/ws`);
+  mainWs.onopen = () => { $('#conn').className='conn-badge on'; $('#conn').innerHTML='<span>&#x25cf;</span> Live'; };
+  mainWs.onclose = () => { $('#conn').className='conn-badge off'; $('#conn').innerHTML='<span>&#x25cf;</span> Disconnected'; setTimeout(connectWS, 3000); };
+  mainWs.onerror = () => mainWs.close();
+  mainWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'init' || msg.type === 'update') {
+      overview = msg.overview || {};
+      challenges = msg.challenges || [];
+      activity = msg.activity || [];
+      maxSolves = Math.max(1, ...challenges.map(c => c.solves || 0));
+      render();
+    }
+  };
+}
+
+// ── Render ──
+function render() {
+  renderStats();
+  renderProgress();
+  renderCategories();
+  renderAgents();
+  renderChallenges();
+  renderActivity();
+  renderElapsed();
+  // ended badge
+  $('#endedBadge').style.display = overview.ctf_ended ? '' : 'none';
+}
+
+function renderStats() {
+  const ov = overview;
+  const pct = ov.total ? Math.round((ov.solved / ov.total) * 100) : 0;
+  const ppct = ov.total_points ? Math.round((ov.solved_points / ov.total_points) * 100) : 0;
+  $('#statsGrid').innerHTML = `
+    <div class="stat-card green"><div class="stat-val" style="color:var(--green)">${ov.solved||0}</div><div class="stat-label">Solved</div><div class="stat-sub">${pct}% complete</div></div>
+    <div class="stat-card orange"><div class="stat-val" style="color:var(--orange)">${ov.remaining||0}</div><div class="stat-label">Remaining</div></div>
+    <div class="stat-card blue"><div class="stat-val" style="color:var(--accent)">${ov.total||0}</div><div class="stat-label">Total</div></div>
+    <div class="stat-card purple"><div class="stat-val" style="color:var(--purple)">${ov.solved_points||0}<small style="font-size:.4em;color:var(--text2)"> / ${ov.total_points||0}</small></div><div class="stat-label">Points</div><div class="stat-sub">${ppct}%</div></div>
+    <div class="stat-card blue"><div class="stat-val" style="color:var(--cyan)">${ov.running_agents||0}<small style="font-size:.5em;color:var(--text2)"> / ${(ov.agents||[]).length}</small></div><div class="stat-label">Active Agents</div></div>
+  `;
+}
+
+function renderProgress() {
+  const ov = overview;
+  const total = ov.total || 1;
+  const solved = ov.solved || 0;
+  // count working (claimed and not solved)
+  const solvedIds = new Set(challenges.filter(c=>c.solved_by_me).map(c=>c.id));
+  const working = challenges.filter(c => c.claimed_by && c.claimed_by.length > 0 && !c.solved_by_me).length;
+  const sp = (solved/total*100).toFixed(1);
+  const wp = (working/total*100).toFixed(1);
+  $('#progressBar').innerHTML = `
+    <div class="progress-fill solved" style="width:${sp}%">${solved>0 ? solved : ''}</div>
+    <div class="progress-fill working" style="width:${wp}%">${working>0 ? working : ''}</div>
+  `;
+  $('#progressLabels').innerHTML = `
+    <span>&#x2705; ${solved} solved</span>
+    <span>&#x1f527; ${working} in progress</span>
+    <span>&#x23f3; ${Math.max(0, total - solved - working)} remaining</span>
+  `;
+}
+
+function renderCategories() {
+  const cats = overview.categories || {};
+  const entries = Object.entries(cats).sort((a,b) => b[1].total - a[1].total);
+  if (!entries.length) { $('#catGrid').innerHTML = ''; return; }
+  // Also update category filters
+  let filterHtml = '<button class="filter-btn'+(catFilter==='all'?' active':'')+'" data-cat="all">All</button>';
+  entries.forEach(([cat]) => {
+    filterHtml += `<button class="filter-btn${catFilter===cat?' active':''}" data-cat="${esc(cat)}">${esc(cat)}</button>`;
+  });
+  $('#catFilters').innerHTML = filterHtml;
+  $$('#catFilters .filter-btn').forEach(btn => btn.addEventListener('click', () => {
+    catFilter = btn.dataset.cat;
+    $$('#catFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderChallenges();
+  }));
+
+  $('#catGrid').innerHTML = entries.map(([cat, d]) => {
+    const pct = d.total ? Math.round(d.solved / d.total * 100) : 0;
+    return `<div class="cat-card">
+      <div class="cat-name">${esc(cat)}</div>
+      <div class="cat-bar-bg"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+      <div class="cat-stats"><span>${d.solved}/${d.total}</span><span>${d.solved_points}/${d.points}pts</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAgents() {
+  const agents = overview.agents || [];
+  // Challenge name lookup
+  const chMap = {};
+  challenges.forEach(c => chMap[c.id] = c);
+
+  const html = agents.map(a => {
+    const workHtml = (a.working_on||[]).map(cid => {
+      const ch = chMap[cid];
+      return ch ? `#${cid} ${esc(ch.name)}` : `#${cid}`;
+    }).join(', ');
+    const modelBadge = a.model ? `<span class="agent-model">${esc(a.model)}</span>` : '';
+    return `<div class="agent-card${selectedAgent===a.name?' selected':''}" data-agent="${esc(a.name)}">
+      <div class="agent-header">
+        <span class="agent-dot ${a.status}"></span>
+        <span class="agent-name">${esc(a.name)}</span>
+        ${modelBadge}
+        <span class="agent-type">${esc(a.type)}</span>
+      </div>
+      <div class="agent-status">${a.status} &middot; ${a.container_id}</div>
+      ${workHtml ? `<div class="agent-working">&#x1f527; ${workHtml}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  $('#dashAgents').innerHTML = html;
+  $('#agentCards').innerHTML = html;
+  $$('.agent-card').forEach(card => card.addEventListener('click', () => selectAgent(card.dataset.agent)));
+}
+
+function renderChallenges() {
+  let filtered = [...challenges];
+  // Category filter
+  if (catFilter !== 'all') filtered = filtered.filter(c => c.category === catFilter);
+  // Status filter
+  if (statusFilter === 'solved') filtered = filtered.filter(c => c.solved_by_me);
+  else if (statusFilter === 'unsolved') filtered = filtered.filter(c => !c.solved_by_me);
+  else if (statusFilter === 'working') filtered = filtered.filter(c => c.claimed_by && c.claimed_by.length > 0 && !c.solved_by_me);
+  // Search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.name||'').toLowerCase().includes(q) ||
+      (c.category||'').toLowerCase().includes(q) ||
+      String(c.id).includes(q)
+    );
+  }
+  // Sort
+  filtered.sort((a,b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (sortCol === 'status') { va = a.solved_by_me ? 1 : 0; vb = b.solved_by_me ? 1 : 0; }
+    if (typeof va === 'string') return sortDir * va.localeCompare(vb);
+    return sortDir * ((va||0) - (vb||0));
+  });
+
+  $('#chBody').innerHTML = filtered.map(c => {
+    const solvePct = maxSolves ? Math.round((c.solves||0)/maxSolves*100) : 0;
+    let statusPill;
+    if (c.solved_by_me) statusPill = '<span class="pill solved">&#x2705; Solved</span>';
+    else if (c.claimed_by && c.claimed_by.length > 0) {
+      // Display multiple agents
+      const agentsList = Array.isArray(c.claimed_by) ? c.claimed_by.join(', ') : c.claimed_by;
+      const count = Array.isArray(c.claimed_by) ? c.claimed_by.length : 1;
+      statusPill = `<span class="pill working">&#x1f527; ${esc(agentsList)} (${count})</span>`;
+    }
+    else statusPill = '<span class="pill unsolved">&#x23f3; Open</span>';
+    return `<tr class="${c.solved_by_me?'solved-row':''}" data-id="${c.id}">
+      <td style="color:var(--text3)">#${c.id}</td>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td><span class="cat-tag">${esc(c.category)}</span></td>
+      <td style="font-variant-numeric:tabular-nums">${c.value||0}</td>
+      <td><div class="solves-bar"><span>${c.solves||0}</span><div class="solves-indicator"><div class="solves-fill" style="width:${solvePct}%"></div></div></div></td>
+      <td>${statusPill}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty-state">No challenges match filters</td></tr>';
+
+  // Click handlers
+  $$('#chBody tr[data-id]').forEach(tr => tr.addEventListener('click', () => openDetail(Number(tr.dataset.id))));
+}
+
+function renderActivity() {
+  const html = activity.length ? activity.map(renderActivityItem).join('') : '<div class="empty-state">No activity yet</div>';
+  $('#dashActivity').innerHTML = html;
+  $('#activityFull').innerHTML = html;
+}
+
+function renderActivityItem(ev) {
+  const iconClass = ev.type === 'solve' ? 'solve' : ev.type === 'wrong' ? 'wrong' : ev.type === 'claim' ? 'claim' : 'start';
+  const icons = {solve:'&#x2705;', wrong:'&#x274c;', claim:'&#x1f527;', start:'&#x1f680;'};
+  return `<div class="activity-item">
+    <div class="activity-icon ${iconClass}">${icons[ev.type]||'&#x2022;'}</div>
+    <div class="activity-body">
+      <span class="activity-agent">${esc(ev.agent)}</span>
+      <span class="activity-msg">${esc(ev.msg)}</span>
+    </div>
+    <span class="activity-ts">${esc(ev.ts)}</span>
+  </div>`;
+}
+
+function renderElapsed() {
+  const s = overview.elapsed_seconds || 0;
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  $('#elapsed').textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── Elapsed timer ──
+setInterval(() => {
+  if (overview.elapsed_seconds !== undefined) {
+    overview.elapsed_seconds++;
+    renderElapsed();
+  }
+}, 1000);
+
+// ── Challenge detail ──
+async function openDetail(id) {
+  const overlay = $('#detailOverlay');
+  overlay.classList.add('show');
+  $('#detailContent').innerHTML = '<div class="empty-state">Loading...</div>';
+  try {
+    const resp = await fetch(`/api/challenges/${id}`);
+    const data = await resp.json();
+    if (data.error) { $('#detailContent').innerHTML = `<div class="empty-state">${esc(data.error)}</div>`; return; }
+    let html = `<div class="detail-title">#${data.id} ${esc(data.name)}</div>
+      <div class="detail-meta">
+        <span><span class="cat-tag">${esc(data.category)}</span></span>
+        <span>&#x1f3af; ${data.value||0} pts</span>
+        <span>&#x1f465; ${data.solves||0} solves</span>
+        <span>${data.solved_by_me ? '<span class="pill solved">Solved</span>' : '<span class="pill unsolved">Unsolved</span>'}</span>
+      </div>`;
+    if (data.connection_info) {
+      html += `<div class="detail-section"><h3>Connection</h3><div class="detail-conn">${esc(data.connection_info)}</div></div>`;
+    }
+    html += `<div class="detail-section"><h3>Description</h3><div class="detail-desc">${data.description||'<em>No description</em>'}</div></div>`;
+    if (data.hints && data.hints.length) {
+      html += `<div class="detail-section"><h3>Hints</h3><div class="detail-hints">${data.hints.map((h,i) => `<p><strong>Hint ${i+1}:</strong> ${esc(h)}</p>`).join('')}</div></div>`;
+    }
+    if (data.files && data.files.length) {
+      html += `<div class="detail-section"><h3>Files</h3><ul class="detail-files">${data.files.map(f => `<li>&#x1f4c4; ${esc(f.name)}</li>`).join('')}</ul></div>`;
+    }
+    $('#detailContent').innerHTML = html;
+  } catch(e) {
+    $('#detailContent').innerHTML = `<div class="empty-state">Error loading challenge</div>`;
+  }
+}
+$('#detailClose').addEventListener('click', () => $('#detailOverlay').classList.remove('show'));
+$('#detailOverlay').addEventListener('click', e => { if (e.target === $('#detailOverlay')) $('#detailOverlay').classList.remove('show'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#detailOverlay').classList.remove('show'); });
+
+// ── Agent log ──
+function selectAgent(name) {
+  selectedAgent = name;
+  $$('.agent-card').forEach(c => c.classList.toggle('selected', c.dataset.agent === name));
+  $('#logSection').style.display = 'block';
+  $('#logAgentName').textContent = name;
+  connectLogWS(name);
+  // Switch to agents tab if not there
+  if (!$('#tab-agents').classList.contains('active')) {
+    $$('.tab-btn').forEach(b => b.classList.remove('active'));
+    $$('.tab-panel').forEach(p => p.classList.remove('active'));
+    $$('.tab-btn')[2].classList.add('active');
+    $('#tab-agents').classList.add('active');
+  }
+}
+
+function connectLogWS(name) {
+  if (logWs) { logWs.close(); logWs = null; }
+  const el = $('#logBody');
+  el.textContent = 'Connecting...';
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  logWs = new WebSocket(`${proto}//${location.host}/ws/log/${encodeURIComponent(name)}`);
+  logWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') el.textContent = msg.content;
+    else if (msg.type === 'log_append') el.textContent += msg.content;
+    applyLogSearch();
+    if (autoScroll) el.scrollTop = el.scrollHeight;
+  };
+  logWs.onerror = () => el.textContent = 'Log connection error';
+}
+
+function applyLogSearch() {
+  const q = $('#logSearch').value.trim();
+  const el = $('#logBody');
+  if (!q) return;
+  // Simple highlight via innerHTML (safe since log is textContent)
+  const text = el.textContent;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  el.innerHTML = text.replace(new RegExp(`(${escaped})`, 'gi'), '<span class="highlight">$1</span>');
+}
+$('#logSearch').addEventListener('input', applyLogSearch);
+$('#logAutoScroll').addEventListener('click', () => {
+  autoScroll = !autoScroll;
+  $('#logAutoScroll').classList.toggle('active', autoScroll);
+});
+$('#logClear').addEventListener('click', () => { $('#logBody').textContent = ''; });
+
+// ── Table sorting ──
+$$('.ch-table th[data-sort]').forEach(th => th.addEventListener('click', () => {
+  const col = th.dataset.sort;
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = 1; }
+  $$('.ch-table th .sort-arrow').forEach(s => s.textContent = '');
+  th.querySelector('.sort-arrow').textContent = sortDir > 0 ? ' ▲' : ' ▼';
+  renderChallenges();
+}));
+
+// ── Status filter ──
+$$('[data-status]').forEach(btn => btn.addEventListener('click', () => {
+  statusFilter = btn.dataset.status;
+  $$('[data-status]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderChallenges();
+}));
+
+// ── Search ──
+$('#chSearch').addEventListener('input', e => { searchQuery = e.target.value; renderChallenges(); });
+
+// ── Init ──
+connectWS();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+# ==========================================
+# CTF Agent ベースイメージ
+# ==========================================
+# 全AIエージェントが共有するDockerイメージ。
+# CTF解析に必要なツール群とAI CLIツールをインストールする。
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── システムパッケージ（CTF解析ツール群） ─────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python環境
+    python3 python3-pip python3-dev \
+    # ネットワークツール
+    curl wget git ca-certificates gnupg \
+    # バイナリ解析ツール
+    file binutils xxd hexedit \
+    # デバッグツール
+    gdb ltrace strace \
+    # アーカイブツール
+    unzip p7zip-full bzip2 \
+    # コンパイラ・ビルドツール
+    gcc g++ make cmake \
+    # 暗号・SSL関連
+    libssl-dev libffi-dev \
+    # テキスト処理
+    jq bc \
+    # ネットワーク解析
+    netcat-openbsd nmap \
+    # パスワードクラック・ブルートフォース
+    john hydra hashcat \
+    # その他
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js 20（CLIツールに必要） ────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── GitHub CLI（Copilot CLI用） ──────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── AI CLIツールのインストール ───────────────────────────────
+# GitHub Copilot CLI（npm パッケージ）
+RUN npm install -g @github/copilot --no-update-notifier
+
+# Google Gemini CLI（npm パッケージ）
+RUN npm install -g @google/gemini-cli --no-update-notifier
+
+# OpenAI Codex CLI（npm パッケージ）
+RUN npm install -g @openai/codex --no-update-notifier
+
+# Claude Code CLI（公式インストーラー → バイナリを共有PATHにコピー）
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp -L /root/.local/bin/claude /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
+
+# ── Python CTFライブラリ ─────────────────────────────────────
+RUN pip3 install --no-cache-dir \
+    pycryptodome \
+    z3-solver \
+    sympy \
+    requests \
+    && pip3 install --no-cache-dir pwntools 2>/dev/null || true
+
+# ── Ollamaクライアント（gemini_ollama用） ────────────────────
+RUN curl -fsSL https://ollama.com/install.sh | sh 2>/dev/null || true
+
+# ── CTFブルートフォース用ワードリスト ──────────────────────────
+RUN mkdir -p /usr/share/wordlists && cd /usr/share/wordlists \
+    && echo "=== Downloading rockyou.txt ===" \
+    && curl -fsSL https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt \
+       -o rockyou.txt \
+    && echo "=== Downloading SecLists (selected) ===" \
+    && git clone --depth 1 --filter=blob:none --sparse \
+       https://github.com/danielmiessler/SecLists.git \
+    && cd SecLists \
+    && git sparse-checkout set \
+       Passwords/Common-Credentials \
+       Passwords/Leaked-Databases \
+       Passwords/Default-Credentials \
+       Discovery/Web-Content \
+       Discovery/DNS \
+       Fuzzing \
+       Usernames \
+    && cd / \
+    && echo "=== Wordlists ready ==="
+
+# ── 非rootユーザー作成（Claude Codeのroot制限回避用） ─────────
+RUN useradd -m -s /bin/bash -u 1000 agent \
+    && echo "agent ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ── ランナースクリプトとエントリーポイントをコピー ────────────
+COPY agent_runners/ /agent_runners/
+COPY entrypoint.sh /entrypoint.sh
+COPY submit_flag.sh /submit_flag.sh
+COPY list_challenges.sh /list_challenges.sh
+COPY get_challenge.sh /get_challenge.sh
+COPY get_status.sh /get_status.sh
+RUN chmod +x /entrypoint.sh /submit_flag.sh /list_challenges.sh /get_challenge.sh /get_status.sh
+
+WORKDIR /workspace
+
+CMD ["/bin/bash", "/entrypoint.sh"]

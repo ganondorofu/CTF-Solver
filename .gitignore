@@ -1,0 +1,65 @@
+# 環境変数・シークレット
+.env
+.env.*
+!.env.example
+*.env
+.cli_auth_backup
+**/profiles/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+.venv/
+
+# 実行時生成ディレクトリ
+challenges/**
+!challenges/.gitkeep
+workspace/**
+!workspace/.gitkeep
+!workspace/shared/
+workspace/shared/*
+!workspace/shared/.gitkeep
+
+# ログ
+*.log
+logs/**/*.log
+logs/archive_*/
+logs/ANALYSIS_*.md
+logs/ROOT_CAUSE_ANALYSIS.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# Test & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+*.tar
+*.tar.gz
+
+# Temporary files
+*.tmp
+*.bak
+

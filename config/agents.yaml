@@ -1,0 +1,127 @@
+# ==========================================
+# AIエージェント設定ファイル（v2: 自律モード）
+# ==========================================
+# 各エージェントは自律的にCTF問題を選択・解析・提出する。
+# タイムアウト・リトライはエージェント自身が判断する。
+
+agents:
+  # Claude Code CLI（Anthropic）
+  claude_code:
+    enabled: false
+    type: "claude_code"
+    description: "Claude Code CLI（Anthropic）"
+    env_vars: {}
+    auth_profiles:
+      - name: stemask
+        instances: 1
+
+  # OpenAI Codex CLI
+  codex_cli:
+    enabled: true
+    type: "codex_cli"
+    description: "Codex CLI（OpenAI）"
+    env_vars: {}
+    auth_profiles:
+      - name: ganondorofu
+        instances: 0
+      - name: sub
+        instances: 0
+      - name: ttytb
+        instances: 0
+      - name: ctf1
+        instances: 1
+      - name: ctf2
+        instances: 1
+      - name: ctf3
+        instances: 1
+
+  # GitHub Copilot CLI
+  copilot_cli:
+    enabled: true
+    #model: "GPT-4o"
+    type: "copilot_cli"
+    description: "GitHub Copilot CLI"
+    env_vars: {}
+    auth_profiles:
+      - name: main
+        models:
+          - model: "claude-sonnet-4.5"
+            instances: 2
+          - model: "claude-opus-4.6"
+            instances: 2
+          - model: "GPT-5.3-codex"
+            instances: 1
+      # - name: ootomonaiso
+      #   models:
+      #     - model: "GPT-4o"
+      #       instances: 1
+
+  # Google Gemini CLI
+  gemini_cli:
+    enabled: false
+    model: "gemini-2.5-flash"
+    type: "gemini_cli"
+    description: "Gemini CLI"
+    env_vars: {}
+    auth_profiles:
+      - name: main
+        instances: 1
+      - name: ganondorofu
+        instances: 1
+      - name: sub
+        instances: 1
+      - name: ttytb
+        instances: 1
+
+  # Claude Code CLI（z.ai GLM経由）
+  claude_zai:
+    enabled: true
+    model: "glm-4.7-flash"
+    type: "claude_zai"
+    description: "Claude Code CLI（z.ai / GLM-4.7）"
+    env_vars: {}
+    auth_profiles:
+      - name: ttytb
+        weight: 1
+        env_vars:
+          ZAI_API_KEY: "38d84da939bd4d0c985dd06f79f68b9c.bvyOO3aGFLJsjlwl"
+      - name: sub
+        weight: 1
+        env_vars:
+          ZAI_API_KEY: "8edad6e8317544aaae06bfe00355bf3d.E7WrwFr3gWxVDReW"
+
+  # Claude Code CLI（Kimi / Moonshot AI 経由）
+  kimi:
+    enabled: true
+    model: "kimi-k2.5"
+    type: "kimi"
+    description: "Claude Code CLI（Moonshot AI / Kimi）"
+    env_vars: {}
+    auth_profiles:
+      - name: ganondorofu
+        weight: 1
+        env_vars:
+          KIMI_API_KEY: "sk-4m1eitGTYt4n00gBQbmRovdhI4QybsEcWhe7C2tsuPRsgJBm"
+          KIMI_MODEL: "kimi-k2.5"
+      - name: ttytb
+        weight: 1
+        env_vars:
+          KIMI_API_KEY: "sk-HnivZLA7p7mADWJlcEog5EbkzDMf7V5n4oWOknlKby1sudzT"
+          KIMI_MODEL: "kimi-k2.5"
+
+  # Claude Code CLI（Ollama経由ローカルモデル実行）
+  claude_ollama:
+    instances: 0
+    type: "claude_ollama"
+    description: "Claude Code CLI（Ollama経由）"
+    ollama_model: "gpt-oss:20b"
+    env_vars:
+      OLLAMA_HOST: "${OLLAMA_HOST}"
+
+# Docker設定
+docker:
+  network_mode: "host"
+  user: "1000:1000"  # 非rootユーザーで実行（セキュリティ強化）
+  resources:
+    memory: "4g"
+    cpu_count: 2
