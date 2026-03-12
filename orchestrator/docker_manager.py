@@ -463,6 +463,7 @@ class DockerManager:
                 logger.debug("Auth writeback: %s → %s", tmp_dir, original_dir)
 
     def stop_all(self, container_infos: list[dict]):
+        """Stop tracked containers"""
         for info in container_infos:
             try:
                 info["container"].reload()
@@ -480,6 +481,27 @@ class DockerManager:
                     pass
             for tmp in info.get("temp_dirs", []):
                 shutil.rmtree(tmp, ignore_errors=True)
+    
+    def stop_all_ctf_containers(self):
+        """Stop all CTF-related containers (including orphaned ones)"""
+        try:
+            containers = self.client.containers.list(all=True)
+            ctf_containers = [c for c in containers if c.image.tags and any("ctf-agent" in tag for tag in c.image.tags)]
+            
+            if ctf_containers:
+                logger.info("Stopping %d CTF containers...", len(ctf_containers))
+                for container in ctf_containers:
+                    try:
+                        if container.status == "running":
+                            container.stop(timeout=10)
+                        container.remove(force=True)
+                        logger.debug("Removed container: %s", container.short_id)
+                    except Exception as e:
+                        logger.warning("Failed to stop container %s: %s", container.short_id, e)
+            else:
+                logger.info("No CTF containers found")
+        except Exception as e:
+            logger.error("Failed to stop all containers: %s", e)
 
     def _stream_logs(self, container, agent_name: str, workspace: Path):
         log_dir = Path("logs")

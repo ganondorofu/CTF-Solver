@@ -11,6 +11,7 @@ when to submit flags, and when to give up. The orchestrator only handles:
 import argparse
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -21,6 +22,12 @@ from .ctfd_relay import CTFdRelay
 from .docker_manager import DockerManager
 from .log_archiver import archive_old_logs, cleanup_old_archives
 from .prompt_generator import PromptGenerator
+
+# Global state for graceful shutdown
+_shutdown_flag = False
+_docker_mgr = None
+_relay = None
+_container_infos = []
 
 
 def setup_logging():
@@ -34,6 +41,28 @@ def setup_logging():
 
 
 logger = logging.getLogger(__name__)
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGINT/SIGTERM gracefully"""
+    global _shutdown_flag, _docker_mgr, _relay, _container_infos
+    if _shutdown_flag:
+        logger.warning("Force shutdown (second signal)")
+        sys.exit(1)
+    
+    _shutdown_flag = True
+    logger.info("Shutdown signal received - cleaning up...")
+    
+    if _docker_mgr:
+        logger.info("Stopping containers...")
+        _docker_mgr.stop_all(_container_infos)
+        _docker_mgr.stop_all_ctf_containers()
+    
+    if _relay:
+        _relay.stop()
+    
+    logger.info("=== CTF Solver stopped ===")
+    sys.exit(0)
 
 
 def _resolve_env(value: str) -> str:
@@ -147,7 +176,13 @@ def _free_port(port: int):
 
 
 def main():
+    global _shutdown_flag, _docker_mgr, _relay, _container_infos
+    
     load_dotenv()
+    
+    # Register signal handlers early
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
     parser = argparse.ArgumentParser(description="CTF Solver v2 - Autonomous Agent Mode")
     parser.add_argument("--build-image", action="store_true", help="Build Docker base image and exit")
@@ -182,6 +217,7 @@ def main():
         agents_config=agents_cfg.get("agents", {}),
         docker_config=agents_cfg.get("docker", {}),
     )
+    _docker_mgr = docker_mgr  # Store for signal handler
 
     if args.build_image:
         docker_mgr.build_base_image()
@@ -230,6 +266,7 @@ def main():
         ctf_ended=config.get("ctfd", {}).get("ended", False),
     )
     relay.start()
+    _relay = relay  # Store for signal handler
 
     prompt = PromptGenerator().generate_autonomous()
 
@@ -262,6 +299,8 @@ def main():
             result = future.result()
             if result:
                 container_infos.append(result)
+    
+    _container_infos = container_infos  # Store for signal handler
 
     if not container_infos:
         logger.error("No agents could be started")
@@ -303,7 +342,9 @@ def main():
     except KeyboardInterrupt:
         logger.info("Ctrl+C detected - shutting down...")
     finally:
+        logger.info("Stopping all containers...")
         docker_mgr.stop_all(container_infos)
+        docker_mgr.stop_all_ctf_containers()  # Stop any orphaned containers
         relay.stop()
         logger.info("=== CTF Solver stopped ===")
 
