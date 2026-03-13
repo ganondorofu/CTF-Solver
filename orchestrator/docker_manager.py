@@ -265,11 +265,14 @@ class DockerManager:
 
     # -- Workspace preparation (autonomous mode) --
 
+    _workspace_lock = threading.Lock()
+
     def _prepare_workspace(self, agent_name: str, prompt: str) -> Path:
         ws = Path("workspace") / agent_name.replace("#", "_")
-        ws.mkdir(parents=True, exist_ok=True)
-        (ws / "challenges").mkdir(exist_ok=True)
-        (ws / "state").mkdir(exist_ok=True)
+        with self._workspace_lock:
+            ws.mkdir(parents=True, exist_ok=True)
+            (ws / "challenges").mkdir(exist_ok=True)
+            (ws / "state").mkdir(exist_ok=True)
 
         (ws / "prompt.txt").write_text(prompt, encoding="utf-8")
 
