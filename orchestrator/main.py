@@ -156,7 +156,6 @@ def get_enabled_agents(agents_cfg: dict) -> dict[str, dict]:
 
 def _free_port(port: int):
     """Kill any process holding the given port so WebUI can bind."""
-    import signal
     import subprocess
     try:
         out = subprocess.check_output(
@@ -310,7 +309,6 @@ def main():
     # WebUI 自動起動
     if not args.no_webui:
         try:
-            import signal
             import socket
             import threading
             import uvicorn
